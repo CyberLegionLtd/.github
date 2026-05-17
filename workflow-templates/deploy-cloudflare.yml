@@ -1,0 +1,38 @@
+name: Deploy to Cloudflare Workers (OIDC-ready)
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # OIDC token issuance — for future Cloudflare OIDC trust
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Setup Node
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a  # v4.2.0
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm ci
+
+      # Cloudflare API token used here; OIDC trust for CF requires either:
+      # (a) CF native OIDC support (track CF Dashboard → API Tokens roadmap), or
+      # (b) GitHub OIDC → AWS/GCP role → API token from secrets manager.
+      # See: workspace/docs/POLICY-OIDC-FEDERATION.md
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@31b6f4f78e4a7d8e0c3aff04136fea1b6cdf6e5e  # v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
