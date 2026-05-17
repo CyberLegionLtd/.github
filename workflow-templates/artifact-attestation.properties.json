@@ -1,0 +1,6 @@
+{
+  "name": "Artifact Attestation (Cyber Legion)",
+  "description": "Generate SLSA-style provenance attestations for release artifacts using GitHub keyless signing (OIDC + Sigstore). Triggered on git tags vN.N.N or manual dispatch.",
+  "iconName": "octicon verified",
+  "categories": ["Security", "Deployment"]
+}
