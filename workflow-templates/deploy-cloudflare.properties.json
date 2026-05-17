@@ -1,0 +1,6 @@
+{
+  "name": "Deploy to Cloudflare Workers (OIDC-ready)",
+  "description": "Deploys a Cloudflare Worker via Wrangler with OIDC-ready scaffolding (`id-token: write` declared). Uses API token today; ready to swap for OIDC-derived credentials when CF trust chain is configured.",
+  "iconName": "octicon cloud",
+  "categories": ["Deployment"]
+}
