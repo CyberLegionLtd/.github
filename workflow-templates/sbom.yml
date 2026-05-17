@@ -1,0 +1,35 @@
+name: Generate SBOM
+
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write    # to attach SBOM to release
+  id-token: write    # for signed SBOM attestation
+  attestations: write
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Generate SBOM (SPDX JSON)
+        uses: anchore/sbom-action@9246b90769f852b3a8921f330c59e0b3f439d6e9  # v0.20.1
+        with:
+          format: spdx-json
+          artifact-name: sbom.spdx.json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: true
+
+      - name: Attest SBOM provenance
+        uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b  # v2.1.0
+        with:
+          subject-path: sbom.spdx.json
+          sbom-path: sbom.spdx.json
