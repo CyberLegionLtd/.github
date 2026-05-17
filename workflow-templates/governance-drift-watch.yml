@@ -1,0 +1,97 @@
+name: Governance Drift Watcher
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'   # Monday 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  administration: read   # for ruleset / settings reads
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout governance baseline
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+        with:
+          repository: CyberLegionLtd/.github
+          path: governance
+
+      - name: Setup jq
+        run: |
+          jq --version
+
+      - name: Snapshot current state — enterprise + org + this-repo
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_PAT }}   # PAT with admin:enterprise + admin:org
+        run: |
+          mkdir -p _drift
+          gh api graphql -f query='{enterprise(slug:"cyberlegion"){ownerInfo{twoFactorRequiredSetting membersCanDeleteRepositoriesSetting membersCanInviteCollaboratorsSetting membersCanMakePurchasesSetting}}}' > _drift/enterprise.json
+          gh api enterprises/cyberlegion/actions/permissions > _drift/enterprise-actions.json
+          gh api enterprises/cyberlegion/rulesets > _drift/enterprise-rulesets.json
+          gh api orgs/CyberLegionLtd --jq '{two_factor_requirement_enabled, members_can_delete_repositories, members_can_invite_outside_collaborators, members_can_create_public_pages, advanced_security_enabled_for_new_repositories, secret_scanning_enabled_for_new_repositories, secret_scanning_push_protection_enabled_for_new_repositories, secret_scanning_validity_checks_enabled, web_commit_signoff_required}' > _drift/org.json
+
+      - name: Compare against locked baseline
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.GOVERNANCE_PAT }}
+        run: |
+          FAIL=0
+          # Enterprise 2FA
+          if [ "$(jq -r '.data.enterprise.ownerInfo.twoFactorRequiredSetting' _drift/enterprise.json)" != "ENABLED" ]; then
+            echo "DRIFT: enterprise 2FA mandate dropped" >> _drift/findings.txt
+            FAIL=1
+          fi
+          # Enterprise ruleset 16500430 still active
+          if ! jq -e '.[] | select(.id==16500430 and .enforcement=="active")' _drift/enterprise-rulesets.json >/dev/null 2>&1; then
+            echo "DRIFT: enterprise ruleset 16500430 missing or non-active" >> _drift/findings.txt
+            FAIL=1
+          fi
+          # Actions allowlist tight
+          if [ "$(jq -r '.allowed_actions' _drift/enterprise-actions.json)" != "selected" ]; then
+            echo "DRIFT: enterprise allowed_actions widened" >> _drift/findings.txt
+            FAIL=1
+          fi
+          if [ "$(jq -r '.sha_pinning_required' _drift/enterprise-actions.json)" != "true" ]; then
+            echo "DRIFT: enterprise sha_pinning_required disabled" >> _drift/findings.txt
+            FAIL=1
+          fi
+          # Org settings
+          if [ "$(jq -r '.two_factor_requirement_enabled' _drift/org.json)" != "true" ]; then
+            echo "DRIFT: org 2FA disabled" >> _drift/findings.txt
+            FAIL=1
+          fi
+          if [ "$(jq -r '.members_can_delete_repositories' _drift/org.json)" != "false" ]; then
+            echo "DRIFT: org members can now delete repositories" >> _drift/findings.txt
+            FAIL=1
+          fi
+          if [ "$(jq -r '.members_can_invite_outside_collaborators' _drift/org.json)" != "false" ]; then
+            echo "DRIFT: org members can now invite outside collaborators" >> _drift/findings.txt
+            FAIL=1
+          fi
+          if [ "$(jq -r '.advanced_security_enabled_for_new_repositories' _drift/org.json)" != "true" ]; then
+            echo "DRIFT: org GHAS-for-new-repos disabled" >> _drift/findings.txt
+            FAIL=1
+          fi
+          echo "fail=$FAIL" >> "$GITHUB_OUTPUT"
+          if [ -f _drift/findings.txt ]; then cat _drift/findings.txt; fi
+
+      - name: Open issue if drift detected
+        if: steps.diff.outputs.fail == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY="Governance drift detected by scheduled run \`${{ github.run_id }}\`.
+
+          $(cat _drift/findings.txt)
+
+          Baseline locked 2026-05-17. See \`POLICY-BRANCH-PROTECTION.md\` and \`POLICY-ACTIONS.md\` for expected state. Investigate immediately — drift may indicate accidental UI changes, malicious tampering, or an org admin re-running setup."
+
+          gh issue create \
+            --title "[GOVERNANCE DRIFT] Baseline deviation detected $(date -u +%Y-%m-%d)" \
+            --body "$BODY" \
+            --label "governance-drift" \
+            --label "P0"
