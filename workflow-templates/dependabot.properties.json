@@ -1,0 +1,6 @@
+{
+  "name": "Dependabot baseline config (Cyber Legion)",
+  "description": "Opinionated baseline Dependabot config. Watches github-actions, npm, docker, pip, cargo on weekly schedule. Groups minor+patch updates. Excludes React/Next/TS from grouping (they get major review). Security updates auto-open immediately per org default.",
+  "iconName": "octicon dependabot",
+  "categories": ["Security"]
+}
