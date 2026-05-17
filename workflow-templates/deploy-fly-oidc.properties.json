@@ -1,0 +1,6 @@
+{
+  "name": "Deploy to Fly.io (OIDC-ready)",
+  "description": "Deploys to Fly.io with OIDC-ready scaffolding: `id-token: write` permission, GitHub Environment gating, FLY_API_TOKEN that can be swapped for OIDC trust once configured. Includes post-deploy health check.",
+  "iconName": "octicon rocket",
+  "categories": ["Deployment"]
+}
