@@ -1,0 +1,46 @@
+name: Artifact Attestation
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      artifact-path:
+        description: 'Path to artifact (glob)'
+        required: true
+        default: 'dist/*'
+
+permissions:
+  contents: read
+  id-token: write    # required for OIDC keyless signing
+  attestations: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Set up Node
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a  # v4.2.0
+        with:
+          node-version: '20'
+
+      - name: Build
+        run: |
+          # TODO: replace with your build command
+          echo "Replace this step with your build. Producing a placeholder artifact for demo."
+          mkdir -p dist
+          echo "release artifact" > dist/release.txt
+
+      - name: Generate provenance attestation
+        uses: actions/attest-build-provenance@7668571508540a607bdfd90a87a560489fe372eb  # v2.1.0
+        with:
+          subject-path: ${{ github.event.inputs.artifact-path || 'dist/*' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: release
+          path: dist/
