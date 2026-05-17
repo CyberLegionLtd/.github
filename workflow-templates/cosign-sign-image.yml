@@ -1,0 +1,78 @@
+name: Cosign Sign + Verify (keyless)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Full OCI image ref (registry/name:tag)'
+        required: true
+
+permissions:
+  contents: read
+  packages: write       # if pushing to ghcr.io
+  id-token: write       # required for keyless Sigstore (Fulcio + Rekor)
+  attestations: write   # required for attest-build-provenance
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7d6e3ce6abd2fc04a26b2dd66fb9c1f73fc2b03  # v3.7.0
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2  # v3.10.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567  # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image ref
+        id: ref
+        run: |
+          if [ -n "${{ github.event.inputs.image }}" ]; then
+            echo "image=${{ github.event.inputs.image }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build + push image (digest required for signing)
+        id: build
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75  # v6.9.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ref.outputs.image }}
+
+      - name: Sign image with Cosign (keyless / OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: '1'   # keyless via Fulcio + Rekor
+        run: |
+          cosign sign --yes "${{ steps.ref.outputs.image }}@${{ steps.build.outputs.digest }}"
+
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@7668571508540a607bdfd90a87a560489fe372eb  # v2.1.0
+        with:
+          subject-name: ${{ steps.ref.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify signature (sanity check)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/.+@refs/tags/.+" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.ref.outputs.image }}@${{ steps.build.outputs.digest }}"
