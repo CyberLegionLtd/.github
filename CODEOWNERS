@@ -1,0 +1,6 @@
+# Default org-wide code owner. Falls back to this file when a repo has no
+# CODEOWNERS of its own. Override per-repo with a .github/CODEOWNERS
+# file on the default branch. See docs/github-config-audit-2026-05-17.md
+# for governance context.
+
+* @ioan1iuga
