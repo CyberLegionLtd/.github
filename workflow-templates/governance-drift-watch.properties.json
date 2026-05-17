@@ -1,0 +1,6 @@
+{
+  "name": "Governance Drift Watcher (Cyber Legion)",
+  "description": "Weekly schedule: snapshots enterprise + org settings + the locked ruleset, diffs against the 2026-05-17 baseline, opens a P0 issue if drift detected. The GitOps governance runtime primitive. Install in CyberLegionLtd/.github only.",
+  "iconName": "octicon graph",
+  "categories": ["Security"]
+}
