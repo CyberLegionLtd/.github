@@ -1,0 +1,6 @@
+{
+  "name": "Cosign Sign + Verify (keyless)",
+  "description": "Builds + pushes an OCI image, signs it keyless via Sigstore Fulcio/Rekor using the workflow's OIDC identity, attaches SLSA build provenance, and re-verifies the signature as a sanity check. Stage-6 supply-chain primitive.",
+  "iconName": "octicon shield-lock",
+  "categories": ["Security", "Deployment"]
+}
