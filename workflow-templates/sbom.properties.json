@@ -1,0 +1,6 @@
+{
+  "name": "SBOM Generation (Cyber Legion)",
+  "description": "Generate a CycloneDX/SPDX Software Bill of Materials on every release, attach to the GitHub Release, and sign with GitHub keyless attestation.",
+  "iconName": "octicon package",
+  "categories": ["Security", "Deployment"]
+}
