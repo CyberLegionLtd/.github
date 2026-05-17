@@ -1,0 +1,6 @@
+{
+  "name": "Dependency Review (Cyber Legion)",
+  "description": "Block PRs introducing high-severity vulnerable deps or GPL-incompatible licences. Posts a comment summary on every PR.",
+  "iconName": "octicon shield-check",
+  "categories": ["Security"]
+}
