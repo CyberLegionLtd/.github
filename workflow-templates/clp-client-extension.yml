@@ -1,0 +1,30 @@
+name: Browser extensions
+
+# Builds this product's Chrome, Edge, Firefox and Safari extensions with the
+# shared CLP extension host. This repository supplies only the client
+# descriptor; see
+# https://github.com/CyberLegionLtd/.github/blob/main/docs/CLIENT-DISTRIBUTION.md
+
+on:
+  push:
+    branches: [$default-branch]
+    paths: [distribution/clients/extension.json]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Store version (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@main
+    with:
+      descriptor: distribution/clients/extension.json
+      version: ${{ inputs.version || '1.0.0' }}
+      platforms: chrome,edge,firefox
+      # display-name: Example
+    secrets: inherit

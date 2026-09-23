@@ -1,0 +1,190 @@
+name: CLP client — mobile
+
+# Reusable workflow: builds a spoke's iOS and Android applications from its
+# client descriptor using the one generic CLP mobile host. The calling
+# repository supplies only the descriptor; it never carries mobile host code.
+#
+#   jobs:
+#     mobile:
+#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@main
+#       with:
+#         descriptor: distribution/clients/mobile.json
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      descriptor:
+        description: "Path, in the calling repository, of a client descriptor with host 'mobile'."
+        type: string
+        required: true
+      platforms:
+        description: "Comma-separated subset of: android, ios."
+        type: string
+        default: android,ios
+      bundle-id:
+        description: "Store identifier (reverse-DNS). Derived from the application id when empty."
+        type: string
+        default: ""
+      display-name:
+        description: "Name shown under the icon. Defaults to the application id."
+        type: string
+        default: ""
+      android-release-type:
+        description: "APK or AAB. Used only when a signing keystore is supplied."
+        type: string
+        default: AAB
+      host-ref:
+        description: "Branch, tag or SHA of clp-client-host-mobile."
+        type: string
+        default: dev
+      retention-days:
+        type: number
+        default: 14
+    secrets:
+      CLP_HOSTS_READ_TOKEN:
+        description: "contents:read on clp-client-host-mobile, clp-registry and base-registry."
+        required: true
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: contains(inputs.platforms, 'android')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up mobile host
+        id: host
+        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        with:
+          host: mobile
+          host-ref: ${{ inputs.host-ref }}
+          token: ${{ secrets.CLP_HOSTS_READ_TOKEN }}
+
+      - name: Prepare application
+        working-directory: ${{ steps.host.outputs.host-dir }}
+        env:
+          CLP_CLIENT_DESCRIPTOR: ${{ github.workspace }}/${{ inputs.descriptor }}
+          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id }}
+          CLP_CLIENT_DISPLAY_NAME: ${{ inputs.display-name }}
+        run: |
+          pnpm prepare:app
+          pnpm build
+          pnpm cap add android
+          pnpm cap sync android
+          pnpm apply:native
+
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build unsigned debug APK
+        if: env.HAS_KEYSTORE != 'true'
+        working-directory: ${{ steps.host.outputs.host-dir }}/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Build signed release
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_TYPE: ${{ inputs.android-release-type }}
+        working-directory: ${{ steps.host.outputs.host-dir }}
+        run: |
+          keystore="$RUNNER_TEMP/release.keystore"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          pnpm cap build android \
+            --keystorepath "$keystore" \
+            --keystorepass "$KEYSTORE_PASSWORD" \
+            --keystorealias "$KEY_ALIAS" \
+            --keystorealiaspass "$KEY_PASSWORD" \
+            --androidreleasetype "$RELEASE_TYPE" \
+            --signing-type apksigner
+          rm -f "$keystore"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clp-client-android
+          path: |
+            ${{ steps.host.outputs.host-dir }}/android/app/build/outputs/apk/**/*.apk
+            ${{ steps.host.outputs.host-dir }}/android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  ios:
+    if: contains(inputs.platforms, 'ios')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up mobile host
+        id: host
+        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        with:
+          host: mobile
+          host-ref: ${{ inputs.host-ref }}
+          token: ${{ secrets.CLP_HOSTS_READ_TOKEN }}
+
+      - name: Prepare application
+        working-directory: ${{ steps.host.outputs.host-dir }}
+        env:
+          CLP_CLIENT_DESCRIPTOR: ${{ github.workspace }}/${{ inputs.descriptor }}
+          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id }}
+          CLP_CLIENT_DISPLAY_NAME: ${{ inputs.display-name }}
+        run: |
+          pnpm prepare:app
+          pnpm build
+          pnpm cap add ios
+          pnpm cap sync ios
+          pnpm apply:native
+
+      # Store signing needs an Apple team, certificate and provisioning profile;
+      # until those are provisioned this proves the project compiles and yields
+      # a simulator build for review.
+      - name: Build unsigned simulator app
+        working-directory: ${{ steps.host.outputs.host-dir }}/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/derived" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          cd "$RUNNER_TEMP/derived/Build/Products/Release-iphonesimulator"
+          zip -qry "$RUNNER_TEMP/clp-client-ios-simulator.zip" App.app
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clp-client-ios-simulator
+          path: ${{ runner.temp }}/clp-client-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

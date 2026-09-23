@@ -1,0 +1,139 @@
+name: CLP client — browser extension
+
+# Reusable workflow: builds a spoke's browser extensions (Chrome, Edge,
+# Firefox, Safari) from its client descriptor using the one generic CLP
+# extension host. The calling repository supplies only the descriptor.
+#
+#   jobs:
+#     extension:
+#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@main
+#       with:
+#         descriptor: distribution/clients/extension.json
+#         version: 1.4.0
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      descriptor:
+        description: "Path, in the calling repository, of a client descriptor with host 'extension'."
+        type: string
+        required: true
+      version:
+        description: "Store version: one to four dot-separated integers."
+        type: string
+        required: true
+      platforms:
+        description: "Comma-separated subset of: chrome, edge, firefox, safari."
+        type: string
+        default: chrome,edge,firefox
+      display-name:
+        description: "Toolbar and store name. Defaults to the application id."
+        type: string
+        default: ""
+      gecko-id:
+        description: "Firefox add-on id. Derived from the application id when empty."
+        type: string
+        default: ""
+      host-ref:
+        description: "Branch, tag or SHA of clp-client-host-extension."
+        type: string
+        default: dev
+      retention-days:
+        type: number
+        default: 14
+    secrets:
+      CLP_HOSTS_READ_TOKEN:
+        description: "contents:read on clp-client-host-extension, clp-registry and base-registry."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up extension host
+        id: host
+        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        with:
+          host: extension
+          host-ref: ${{ inputs.host-ref }}
+          token: ${{ secrets.CLP_HOSTS_READ_TOKEN }}
+
+      - name: Build and package
+        working-directory: ${{ steps.host.outputs.host-dir }}
+        env:
+          CLP_CLIENT_DESCRIPTOR: ${{ github.workspace }}/${{ inputs.descriptor }}
+          CLP_CLIENT_VERSION: ${{ inputs.version }}
+          CLP_CLIENT_DISPLAY_NAME: ${{ inputs.display-name }}
+          CLP_CLIENT_GECKO_ID: ${{ inputs.gecko-id }}
+          CLP_CLIENT_PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          pnpm build
+          pnpm package
+          mkdir -p "$RUNNER_TEMP/extensions"
+          for dir in out/*/; do
+            platform="$(basename "$dir")"
+            (cd "$dir" && zip -qr "$RUNNER_TEMP/extensions/clp-client-extension-$platform.zip" .)
+          done
+          ls -l "$RUNNER_TEMP/extensions"
+
+      - name: Upload store packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: clp-client-extensions
+          path: ${{ runner.temp }}/extensions/*.zip
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  safari:
+    needs: package
+    if: contains(inputs.platforms, 'safari')
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: clp-client-extensions
+          path: ${{ runner.temp }}/extensions
+
+      # Safari ships a web extension inside a macOS/iOS app; Apple's converter
+      # generates that app. Signing and App Store submission need an Apple team.
+      - name: Convert and build unsigned Safari app
+        env:
+          DISPLAY_NAME: ${{ inputs.display-name }}
+        run: |
+          work="$RUNNER_TEMP/safari"
+          mkdir -p "$work/extension"
+          unzip -q "$RUNNER_TEMP/extensions/clp-client-extension-safari.zip" -d "$work/extension"
+          name="${DISPLAY_NAME:-CLP Client}"
+          xcrun safari-web-extension-converter "$work/extension" \
+            --project-location "$work/project" \
+            --app-name "$name" \
+            --macos-only \
+            --copy-resources \
+            --no-open \
+            --no-prompt \
+            --force
+          project="$(find "$work/project" -name '*.xcodeproj' -maxdepth 3 | head -n 1)"
+          xcodebuild -project "$project" -configuration Release \
+            -derivedDataPath "$work/derived" CODE_SIGNING_ALLOWED=NO build
+          cd "$work/derived/Build/Products/Release"
+          zip -qry "$RUNNER_TEMP/clp-client-extension-safari-macos.zip" ./*.app
+
+      - name: Upload Safari app
+        uses: actions/upload-artifact@v4
+        with:
+          name: clp-client-extension-safari-macos
+          path: ${{ runner.temp }}/clp-client-extension-safari-macos.zip
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

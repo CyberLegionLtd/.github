@@ -1,0 +1,107 @@
+name: Set up a CLP client host
+description: >
+  Checks out one generic CLP client host (clp-client-host-<host>) together with
+  the client descriptor contract it resolves against, lays them out as the
+  pnpm workspace they are developed in, and installs dependencies. Every
+  reusable client workflow in this repository starts here.
+
+inputs:
+  host:
+    description: "Client host to set up: mobile or extension."
+    required: true
+  host-ref:
+    description: "Branch, tag or SHA of clp-client-host-<host>."
+    required: false
+    default: dev
+  registry-ref:
+    description: "Branch, tag or SHA of clp-registry (provides clp-client-core)."
+    required: false
+    default: dev
+  base-registry-ref:
+    description: "Branch, tag or SHA of base-registry (provides core-types)."
+    required: false
+    default: dev
+  token:
+    description: "Token with contents:read on the host, clp-registry and base-registry repositories."
+    required: true
+
+outputs:
+  host-dir:
+    description: "Absolute path of the checked-out host, ready for pnpm scripts."
+    value: ${{ steps.layout.outputs.host-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate host
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: |
+        case "$HOST" in
+          mobile|extension) ;;
+          *) echo "::error::unsupported client host '$HOST' (supported: mobile, extension)"; exit 1 ;;
+        esac
+
+    - name: Check out client host
+      uses: actions/checkout@v4
+      with:
+        repository: CyberLegionLtd/clp-client-host-${{ inputs.host }}
+        ref: ${{ inputs.host-ref }}
+        token: ${{ inputs.token }}
+        path: .clp-hosts/clp-client-host-${{ inputs.host }}
+        persist-credentials: false
+
+    - name: Check out client descriptor contract
+      uses: actions/checkout@v4
+      with:
+        repository: CyberLegionLtd/clp-registry
+        ref: ${{ inputs.registry-ref }}
+        token: ${{ inputs.token }}
+        path: .clp-hosts/clp-registry
+        sparse-checkout: packages/clp-client-core
+        persist-credentials: false
+
+    - name: Check out core types
+      uses: actions/checkout@v4
+      with:
+        repository: CyberLegionLtd/base-registry
+        ref: ${{ inputs.base-registry-ref }}
+        token: ${{ inputs.token }}
+        path: .clp-hosts/base-registry
+        sparse-checkout: |
+          packages/contracts/core-types
+          packages/semantic/contracts
+        persist-credentials: false
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Lay out workspace
+      id: layout
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: |
+        root="$GITHUB_WORKSPACE/.clp-hosts"
+        cat > "$root/pnpm-workspace.yaml" <<YAML
+        packages:
+          - "clp-client-host-$HOST"
+          - "clp-registry/packages/clp-client-core"
+          - "base-registry/packages/contracts/core-types"
+          - "base-registry/packages/semantic/contracts"
+        YAML
+        echo '{ "name": "clp-client-host-workspace", "private": true }' > "$root/package.json"
+        echo "host-dir=$root/clp-client-host-$HOST" >> "$GITHUB_OUTPUT"
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: .clp-hosts
+      run: pnpm install --no-frozen-lockfile

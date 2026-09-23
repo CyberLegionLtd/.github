@@ -1,0 +1,7 @@
+{
+  "name": "CLP mobile apps (iOS, Android)",
+  "description": "Build this product's iOS and Android apps from its client descriptor with the shared CLP mobile host.",
+  "iconName": "clp-client",
+  "categories": ["Mobile", "TypeScript"],
+  "filePatterns": ["^distribution/clients/mobile\\.json$"]
+}

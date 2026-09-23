@@ -1,0 +1,7 @@
+{
+  "name": "CLP browser extensions (Chrome, Edge, Firefox, Safari)",
+  "description": "Build this product's browser extensions from its client descriptor with the shared CLP extension host.",
+  "iconName": "clp-client",
+  "categories": ["JavaScript", "TypeScript"],
+  "filePatterns": ["^distribution/clients/extension\\.json$"]
+}

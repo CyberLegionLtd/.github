@@ -1,0 +1,24 @@
+name: Mobile apps
+
+# Builds this product's iOS and Android apps with the shared CLP mobile host.
+# This repository supplies only the client descriptor; see
+# https://github.com/CyberLegionLtd/.github/blob/main/docs/CLIENT-DISTRIBUTION.md
+
+on:
+  push:
+    branches: [$default-branch]
+    paths: [distribution/clients/mobile.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@main
+    with:
+      descriptor: distribution/clients/mobile.json
+      platforms: android,ios
+      # bundle-id: co.uk.cyberlegion.example.app
+      # display-name: Example
+    secrets: inherit
