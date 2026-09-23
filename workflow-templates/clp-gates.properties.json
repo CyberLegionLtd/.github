@@ -1,0 +1,7 @@
+{
+  "name": "CLP Gates",
+  "description": "One reusable gate: profile-driven quality, security, privacy, compliance and product checks. Reads .gates/gates.yaml; invokes the canonical CyberLegionLtd/clp-registry test and certification packages.",
+  "iconName": "shield",
+  "categories": ["Security", "Continuous integration"],
+  "filePatterns": [".*"]
+}
