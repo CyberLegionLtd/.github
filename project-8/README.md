@@ -4,9 +4,9 @@
 
 - **Fields:** `Spoke` (a8i, chyper, cyberlegion, dgidgi, stelargate, one, clq, clp, estate), `Repo Type`
   (hub, api, console, docs, landing, status, support, marketplace, shop, registry, platform-service,
-  capability, org), `Repository` (text).
+  capability, org). The built-in `Repository` field covers the repo.
 - **Repos:** links every non-archived org repo to the project.
-- **Items:** adds every open issue and PR and fills in the three fields above.
+- **Items:** adds every open issue and PR and sets `Spoke` and `Repo Type`.
 
 The spokes come from `CyberLegionLtd/spokes` → `spokes.json`. Repos are classified by name prefix
 (`<spoke>-<surface|capability>`). `clp-*` is the platform layer. `spokes`, `spokes-registry`,

@@ -2,7 +2,7 @@
 // Configures org Project #8 as the single board for every spoke and its repos.
 //   PROJECT_TOKEN=<classic PAT: project, repo, read:org> node project-8/configure.mjs [--dry-run]
 // Idempotent: creates missing fields/options, links every repo, adds open issues + PRs,
-// and sets Spoke / Repo Type / Repository fields on each item.
+// and sets Spoke / Repo Type on each item (Repository is a built-in field).
 const ORG = process.env.ORG ?? 'CyberLegionLtd';
 const NUMBER = Number(process.env.PROJECT_NUMBER ?? 8);
 const TOKEN = process.env.PROJECT_TOKEN ?? process.env.GH_TOKEN;
@@ -80,13 +80,6 @@ async function ensureSelect(project, name, options) {
   { f: existing.id, o: [...existing.options.map((o) => ({ id: o.id, name: o.name, color: 'GRAY', description: '' })), ...opts(missing)] });
 }
 
-async function ensureText(project, name) {
-  if (project.fields.nodes.some((f) => f.name === name)) return;
-  console.log(`+ field ${name}`);
-  await mutate(`mutation($p:ID!,$name:String!){createProjectV2Field(input:{projectId:$p,dataType:TEXT,name:$name}){clientMutationId}}`,
-    { p: project.id, name });
-}
-
 const REPOS_Q = `query($org:String!,$after:String){organization(login:$org){repositories(first:100,after:$after,isArchived:false){
   pageInfo{hasNextPage endCursor} nodes{id name}}}}`;
 const WORK_Q = `query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){
@@ -100,7 +93,6 @@ async function main() {
   console.log(`Project #${NUMBER}: ${project.title}${DRY ? ' (dry run)' : ''}`);
   await ensureSelect(project, 'Spoke', SPOKES);
   await ensureSelect(project, 'Repo Type', TYPES);
-  await ensureText(project, 'Repository');
   if (!DRY) project = await loadProject();
   const field = (n) => project.fields.nodes.find((f) => f.name === n);
   const opt = (f, n) => f?.options?.find((o) => o.name === n)?.id;
@@ -127,7 +119,6 @@ async function main() {
       { p: project.id, i: item, f: f.id, v: value });
       await set(field('Spoke'), { singleSelectOptionId: opt(field('Spoke'), spoke) });
       await set(field('Repo Type'), { singleSelectOptionId: opt(field('Repo Type'), type) });
-      await set(field('Repository'), { text: repo.name });
     }
     console.log(`${repo.name}: ${spoke}/${type}, ${content.length} open items`);
   }
