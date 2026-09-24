@@ -20,7 +20,7 @@ PROJECT_TOKEN=<classic PAT: project, repo, read:org> node project-8/configure.mj
 PROJECT_TOKEN=... node project-8/configure.mjs
 ```
 
-Or add a `PROJECT_TOKEN` org/repo secret and run the **Project 8 sync** workflow. It also runs daily.
+The daily **Project 8 sync** workflow lives in `CyberLegionLtd/spokes` and uses the `PROJECT_TOKEN` secret from its `dev` environment.
 
 ## Views (manual step; the API can't create views)
 
