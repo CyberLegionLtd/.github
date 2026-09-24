@@ -6,7 +6,7 @@ name: CLP client — mobile
 #
 #   jobs:
 #     mobile:
-#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@main
+#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@v1
 #       with:
 #         descriptor: distribution/clients/mobile.json
 #       secrets: inherit
@@ -72,7 +72,7 @@ jobs:
 
       - name: Set up mobile host
         id: host
-        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        uses: CyberLegionLtd/.github/actions/setup-client-host@v1
         with:
           host: mobile
           host-ref: ${{ inputs.host-ref }}
@@ -145,7 +145,7 @@ jobs:
 
       - name: Set up mobile host
         id: host
-        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        uses: CyberLegionLtd/.github/actions/setup-client-host@v1
         with:
           host: mobile
           host-ref: ${{ inputs.host-ref }}

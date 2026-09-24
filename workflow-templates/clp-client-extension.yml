@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   extension:
-    uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@main
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@v1
     with:
       descriptor: distribution/clients/extension.json
       version: ${{ inputs.version || '1.0.0' }}

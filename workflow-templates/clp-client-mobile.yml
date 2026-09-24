@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   mobile:
-    uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@main
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@v1
     with:
       descriptor: distribution/clients/mobile.json
       platforms: android,ios

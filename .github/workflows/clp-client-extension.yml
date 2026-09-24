@@ -6,7 +6,7 @@ name: CLP client — browser extension
 #
 #   jobs:
 #     extension:
-#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@main
+#       uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@v1
 #       with:
 #         descriptor: distribution/clients/extension.json
 #         version: 1.4.0
@@ -62,7 +62,7 @@ jobs:
 
       - name: Set up extension host
         id: host
-        uses: CyberLegionLtd/.github/actions/setup-client-host@main
+        uses: CyberLegionLtd/.github/actions/setup-client-host@v1
         with:
           host: extension
           host-ref: ${{ inputs.host-ref }}

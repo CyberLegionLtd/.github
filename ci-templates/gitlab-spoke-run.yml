@@ -1,7 +1,7 @@
 # GitLab CI template: run one spoke capability from a pipeline.
 #
 #   include:
-#     - remote: https://raw.githubusercontent.com/CyberLegionLtd/.github/main/ci-templates/gitlab-spoke-run.yml
+#     - remote: https://raw.githubusercontent.com/CyberLegionLtd/.github/v1/ci-templates/gitlab-spoke-run.yml
 #
 #   scan:
 #     extends: .spoke-run

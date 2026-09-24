@@ -88,7 +88,7 @@ which is not built yet (see "Not available yet").
 ## GitHub Actions
 
 ```yaml
-- uses: CyberLegionLtd/.github/actions/spoke-run@main
+- uses: CyberLegionLtd/.github/actions/spoke-run@v1
   id: scan
   with:
     spoke: dgidgi

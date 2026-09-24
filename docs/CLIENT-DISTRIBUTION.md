@@ -74,7 +74,7 @@ hand:
 ```yaml
 jobs:
   mobile:
-    uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@main
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-mobile.yml@v1
     with:
       descriptor: distribution/clients/mobile.json
       bundle-id: co.uk.cyberlegion.example.app   # optional
@@ -82,7 +82,7 @@ jobs:
     secrets: inherit
 
   extension:
-    uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@main
+    uses: CyberLegionLtd/.github/.github/workflows/clp-client-extension.yml@v1
     with:
       descriptor: distribution/clients/extension.json
       version: 1.0.0
