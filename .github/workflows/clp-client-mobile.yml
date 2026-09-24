@@ -15,9 +15,29 @@ on:
   workflow_call:
     inputs:
       descriptor:
-        description: "Path, in the calling repository, of a client descriptor with host 'mobile'."
+        description: "Path, in the calling repository, of a client descriptor with host 'mobile'. Leave empty to generate one from distribution contracts."
         type: string
-        required: true
+        default: ""
+      distribution-console:
+        description: "Console-layer distribution/clients.yaml (used when descriptor is empty)."
+        type: string
+        default: ""
+      distribution-solution:
+        description: "Solution-layer distribution/clients.yaml (used when descriptor is empty)."
+        type: string
+        default: ""
+      distribution-app:
+        description: "App-layer distribution/clients.yaml (used when descriptor is empty)."
+        type: string
+        default: ""
+      app-id:
+        description: "Application to build, when generating from distribution contracts."
+        type: string
+        default: ""
+      origin:
+        description: "https origin the application is served from, when the binding entry is not one."
+        type: string
+        default: ""
       platforms:
         description: "Comma-separated subset of: android, ios."
         type: string
@@ -77,12 +97,38 @@ jobs:
           host: mobile
           host-ref: ${{ inputs.host-ref }}
           token: ${{ secrets.CLP_HOSTS_READ_TOKEN }}
+          with-resolver: ${{ inputs.descriptor == '' }}
+
+      - name: Resolve descriptor
+        id: descriptor
+        env:
+          DESCRIPTOR: ${{ inputs.descriptor }}
+          RESOLVER: ${{ steps.host.outputs.resolver }}
+          CONSOLE_LAYER: ${{ inputs.distribution-console }}
+          SOLUTION_LAYER: ${{ inputs.distribution-solution }}
+          APP_LAYER: ${{ inputs.distribution-app }}
+          APP_ID: ${{ inputs.app-id }}
+          ORIGIN: ${{ inputs.origin }}
+        run: |
+          if [ -n "$DESCRIPTOR" ]; then
+            echo "path=$GITHUB_WORKSPACE/$DESCRIPTOR" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          args=(--emit-descriptor=mobile "--app-id=$APP_ID" "--out=$RUNNER_TEMP/client.json")
+          [ -n "$CONSOLE_LAYER" ] && args+=("--console=$GITHUB_WORKSPACE/$CONSOLE_LAYER")
+          [ -n "$SOLUTION_LAYER" ] && args+=("--solution=$GITHUB_WORKSPACE/$SOLUTION_LAYER")
+          [ -n "$APP_LAYER" ] && args+=("--app=$GITHUB_WORKSPACE/$APP_LAYER")
+          [ -n "$ORIGIN" ] && args+=("--origin=$ORIGIN")
+          node "$RESOLVER" "${args[@]}"
+          jq '.descriptor' "$RUNNER_TEMP/client.json" > "$RUNNER_TEMP/descriptor.json"
+          echo "path=$RUNNER_TEMP/descriptor.json" >> "$GITHUB_OUTPUT"
+          echo "bundle-id=$(jq -r '.packaging.bundleId // empty' "$RUNNER_TEMP/client.json")" >> "$GITHUB_OUTPUT"
 
       - name: Prepare application
         working-directory: ${{ steps.host.outputs.host-dir }}
         env:
-          CLP_CLIENT_DESCRIPTOR: ${{ github.workspace }}/${{ inputs.descriptor }}
-          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id }}
+          CLP_CLIENT_DESCRIPTOR: ${{ steps.descriptor.outputs.path }}
+          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id || steps.descriptor.outputs.bundle-id }}
           CLP_CLIENT_DISPLAY_NAME: ${{ inputs.display-name }}
         run: |
           pnpm prepare:app
@@ -150,12 +196,38 @@ jobs:
           host: mobile
           host-ref: ${{ inputs.host-ref }}
           token: ${{ secrets.CLP_HOSTS_READ_TOKEN }}
+          with-resolver: ${{ inputs.descriptor == '' }}
+
+      - name: Resolve descriptor
+        id: descriptor
+        env:
+          DESCRIPTOR: ${{ inputs.descriptor }}
+          RESOLVER: ${{ steps.host.outputs.resolver }}
+          CONSOLE_LAYER: ${{ inputs.distribution-console }}
+          SOLUTION_LAYER: ${{ inputs.distribution-solution }}
+          APP_LAYER: ${{ inputs.distribution-app }}
+          APP_ID: ${{ inputs.app-id }}
+          ORIGIN: ${{ inputs.origin }}
+        run: |
+          if [ -n "$DESCRIPTOR" ]; then
+            echo "path=$GITHUB_WORKSPACE/$DESCRIPTOR" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          args=(--emit-descriptor=mobile "--app-id=$APP_ID" "--out=$RUNNER_TEMP/client.json")
+          [ -n "$CONSOLE_LAYER" ] && args+=("--console=$GITHUB_WORKSPACE/$CONSOLE_LAYER")
+          [ -n "$SOLUTION_LAYER" ] && args+=("--solution=$GITHUB_WORKSPACE/$SOLUTION_LAYER")
+          [ -n "$APP_LAYER" ] && args+=("--app=$GITHUB_WORKSPACE/$APP_LAYER")
+          [ -n "$ORIGIN" ] && args+=("--origin=$ORIGIN")
+          node "$RESOLVER" "${args[@]}"
+          jq '.descriptor' "$RUNNER_TEMP/client.json" > "$RUNNER_TEMP/descriptor.json"
+          echo "path=$RUNNER_TEMP/descriptor.json" >> "$GITHUB_OUTPUT"
+          echo "bundle-id=$(jq -r '.packaging.bundleId // empty' "$RUNNER_TEMP/client.json")" >> "$GITHUB_OUTPUT"
 
       - name: Prepare application
         working-directory: ${{ steps.host.outputs.host-dir }}
         env:
-          CLP_CLIENT_DESCRIPTOR: ${{ github.workspace }}/${{ inputs.descriptor }}
-          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id }}
+          CLP_CLIENT_DESCRIPTOR: ${{ steps.descriptor.outputs.path }}
+          CLP_CLIENT_BUNDLE_ID: ${{ inputs.bundle-id || steps.descriptor.outputs.bundle-id }}
           CLP_CLIENT_DISPLAY_NAME: ${{ inputs.display-name }}
         run: |
           pnpm prepare:app

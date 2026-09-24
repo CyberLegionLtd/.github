@@ -24,7 +24,27 @@ host adds device integration only.
 | `extension` | `clp-client-host-extension` | `chrome`, `edge`, `firefox`, `safari` | Manifest V3 |
 | `desktop` | `clp-client-host-desktop` | `windows`, `macos`, `linux` | Tauri v2 (descriptor supplied at start-up; no reusable build workflow yet) |
 
-## 1. Add a descriptor
+## 1. Declare the client
+
+**Preferred: from your distribution contracts.** If your repository already
+declares `distribution/clients.yaml` at console, solution or app level, the
+workflow generates the descriptor from them through the `clp-clients`
+inheritance rule (console → solution → app, field by field), so there is one
+configuration, not two:
+
+```yaml
+    with:
+      distribution-console: distribution/clients.yaml
+      distribution-app: apps/field/distribution/clients.yaml
+      app-id: field-app
+      origin: https://field.example.com/
+```
+
+A product can only enable a host that `clp-clients` marks `live`. `mobile`
+and `extension` are `logical` until they pass qualification, so generation
+refuses them until then; that is the intended gate, not a fault.
+
+**Alternatively: a hand-written descriptor**, passed as `descriptor:`.
 
 The contract is `@cyberlegionltd/clp-client-core` (`resolveClientDescriptor`).
 Resolution fails closed, so a descriptor the host cannot honour stops the build

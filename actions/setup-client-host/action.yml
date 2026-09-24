@@ -22,13 +22,24 @@ inputs:
     required: false
     default: dev
   token:
-    description: "Token with contents:read on the host, clp-registry and base-registry repositories."
+    description: "Token with contents:read on the host, clp-registry and base-registry repositories (and clp-clients when with-resolver is true)."
     required: true
+  with-resolver:
+    description: "Also set up the clp-clients distribution resolver, to generate descriptors from distribution contracts."
+    required: false
+    default: "false"
+  clients-ref:
+    description: "Branch, tag or SHA of clp-clients."
+    required: false
+    default: dev
 
 outputs:
   host-dir:
     description: "Absolute path of the checked-out host, ready for pnpm scripts."
     value: ${{ steps.layout.outputs.host-dir }}
+  resolver:
+    description: "Path of the clp-clients distribution CLI, when with-resolver is true."
+    value: ${{ steps.resolver.outputs.cli }}
 
 runs:
   using: composite
@@ -105,3 +116,23 @@ runs:
       shell: bash
       working-directory: .clp-hosts
       run: pnpm install --no-frozen-lockfile
+
+    - name: Check out distribution resolver
+      if: inputs.with-resolver == 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: CyberLegionLtd/clp-clients
+        ref: ${{ inputs.clients-ref }}
+        token: ${{ inputs.token }}
+        path: .clp-hosts/clp-clients
+        persist-credentials: false
+
+    - name: Build distribution resolver
+      id: resolver
+      if: inputs.with-resolver == 'true'
+      shell: bash
+      working-directory: .clp-hosts/clp-clients
+      run: |
+        pnpm install --frozen-lockfile --ignore-workspace
+        pnpm build
+        echo "cli=$PWD/scripts/validate-distribution.mjs" >> "$GITHUB_OUTPUT"
