@@ -30,11 +30,21 @@ org_var() {
   gh variable set "$1" --org "$ORG" --visibility all --body "$2"
 }
 
+# Environments that share one value. clp-infra's audit job still binds the
+# legacy environment name `prod`, so its production values are written to both
+# `production` and `prod` until that job is migrated.
+envs_for() {
+  local repo="$1" env="$2"
+  if [ "$repo" = clp-infra ] && [ "$env" = production ]; then echo "production prod"; else echo "$env"; fi
+}
+
 env_secret() {
-  local repo="$1" env="$2" name="$3" v
+  local repo="$1" env="$2" name="$3" v target
   v="$(ask "$repo [$env] secret $name (empty = skip)")"
   [ -z "$v" ] && return 0
-  printf '%s' "$v" | gh secret set "$name" --repo "$ORG/$repo" --env "$env"
+  for target in $(envs_for "$repo" "$env"); do
+    printf '%s' "$v" | gh secret set "$name" --repo "$ORG/$repo" --env "$target"
+  done
 }
 
 # Names only; values are never readable through the API.
@@ -123,7 +133,9 @@ org_var PACKAGE_REGISTRY_URL "https://npm.pkg.github.com"
 echo "== Environments"
 for repo in "${DEPLOY_REPOS[@]}"; do
   for env in "${ENVS[@]}"; do
-    gh api -X PUT "repos/$ORG/$repo/environments/$env" >/dev/null
+    for target in $(envs_for "$repo" "$env"); do
+      gh api -X PUT "repos/$ORG/$repo/environments/$target" >/dev/null
+    done
   done
 done
 
@@ -136,4 +148,4 @@ for env in "${ENVS[@]}"; do
 done
 
 echo "Done. Protect the 'production' environment with required reviewers in each repo's Settings → Environments."
-echo "clp-infra's audit job still binds environment 'prod' (see docs, open decisions)."
+echo "clp-infra: production values were also written to the legacy 'prod' environment used by its audit job; remove 'prod' once that job binds 'production'."

@@ -69,7 +69,7 @@ Delete each old secret only after its canonical replacement is set. The fallback
 ### Fallback order and the production safety rule
 
 - **Cross-repo tokens (read and write) and app secrets:** `secrets.GH_PAT || secrets.OLD` (for publishing, `|| github.token` last).
-- **Environment-suffixed secrets in staging and production:** the order is reversed: `secrets.X_PROD || secrets.X`. Until the Environments exist, a repo-level `FLY_API_TOKEN` holds the **dev** value. If it came first, it would shadow `FLY_API_TOKEN_PROD` in a production job. With the legacy suffixed secret first, a dev credential can never reach a production deploy. `tests/workflow-secret-selection.test.mjs` in clp-infra enforces this.
+- **Environment-suffixed secrets in staging and production:** the order is reversed, and the suffix always matches the job's own environment: staging jobs read `secrets.X_STAGING || secrets.X`, production jobs read `secrets.X_PROD || secrets.X`. A staging job never reads a `_PROD` secret. Until the Environments exist, a repo-level `FLY_API_TOKEN` holds the **dev** value. If it came first, it would shadow `FLY_API_TOKEN_PROD` in a production job. With the legacy suffixed secret first, a dev credential can never reach a production deploy. `tests/workflow-secret-selection.test.mjs` in clp-infra enforces this.
 - **The flip needs no code change.** Once `production`/`FLY_API_TOKEN` is set, delete `FLY_API_TOKEN_PROD` and the expression falls through to the environment-scoped value.
 - **Order matters.** Never delete a suffixed secret before its environment-scoped value exists. Otherwise the job would fall back to the repo-level (dev) value.
 
