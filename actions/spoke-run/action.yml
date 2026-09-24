@@ -1,0 +1,85 @@
+name: Run a spoke capability
+description: >
+  Installs a spoke CLI (cyberlegion, a8i, chyper, dgidgi, stelargate), submits
+  one governed capability run for your tenant, waits for it to finish, and
+  exposes the result. Everything goes through the spoke's public API.
+
+inputs:
+  spoke:
+    description: "Spoke CLI to use: a8i, chyper, cyberlegion, dgidgi or stelargate."
+    required: true
+  capability:
+    description: "Canonical dotted capability id, for example domain.action."
+    required: true
+  input:
+    description: "Capability input as a JSON object."
+    required: false
+    default: "{}"
+  input-file:
+    description: "Path to a JSON file with the capability input. Overrides input."
+    required: false
+    default: ""
+  api-url:
+    description: "The spoke's public API origin, for example https://api.dgidgi.io."
+    required: true
+  token:
+    description: "Tenant API token. Store it as a secret."
+    required: true
+  wait:
+    description: "Wait for the run to finish (true) or return once it is admitted (false)."
+    required: false
+    default: "true"
+  timeout-seconds:
+    description: "Maximum time to wait for completion."
+    required: false
+    default: "900"
+  poll-seconds:
+    description: "Seconds between status checks."
+    required: false
+    default: "5"
+  cli-version:
+    description: "CLI release to install."
+    required: false
+    default: latest
+  download-base-url:
+    description: >
+      Release channel serving <version>/<os>-<arch>/<spoke>[.exe] and
+      <version>/<os>-<arch>/SHA256SUMS.
+    required: true
+
+outputs:
+  run-id:
+    description: "Identifier of the admitted run."
+    value: ${{ steps.run.outputs.run-id }}
+  status:
+    description: "Final run status (or 'queued' when wait is false)."
+    value: ${{ steps.run.outputs.status }}
+  result:
+    description: "Run document as JSON."
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install spoke CLI
+      shell: bash
+      env:
+        SPOKE: ${{ inputs.spoke }}
+        VERSION: ${{ inputs.cli-version }}
+        BASE_URL: ${{ inputs.download-base-url }}
+      run: bash "$GITHUB_ACTION_PATH/install.sh"
+
+    - name: Run capability
+      id: run
+      shell: bash
+      env:
+        SPOKE: ${{ inputs.spoke }}
+        CAPABILITY: ${{ inputs.capability }}
+        INPUT_JSON: ${{ inputs.input }}
+        INPUT_FILE: ${{ inputs.input-file }}
+        API_URL: ${{ inputs.api-url }}
+        API_TOKEN: ${{ inputs.token }}
+        WAIT: ${{ inputs.wait }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        POLL_SECONDS: ${{ inputs.poll-seconds }}
+      run: bash "$GITHUB_ACTION_PATH/run.sh"

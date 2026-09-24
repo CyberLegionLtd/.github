@@ -1,0 +1,52 @@
+# GitLab CI template: run one spoke capability from a pipeline.
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/CyberLegionLtd/.github/main/ci-templates/gitlab-spoke-run.yml
+#
+#   scan:
+#     extends: .spoke-run
+#     variables:
+#       SPOKE: dgidgi
+#       SPOKE_API_URL: https://api.dgidgi.io
+#       SPOKE_CAPABILITY: domain.action
+#       SPOKE_INPUT: '{"target":"example"}'
+#       SPOKE_DOWNLOAD_BASE_URL: https://<release-channel>
+#   # Set SPOKE_API_TOKEN as a masked, protected CI/CD variable.
+
+.spoke-run:
+  image: debian:bookworm-slim
+  variables:
+    SPOKE_CLI_VERSION: latest
+    SPOKE_INPUT: "{}"
+    SPOKE_TIMEOUT_SECONDS: "900"
+    SPOKE_POLL_SECONDS: "5"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl jq ca-certificates >/dev/null
+    - |
+      set -eu
+      base="${SPOKE_DOWNLOAD_BASE_URL%/}/$SPOKE_CLI_VERSION/linux-x64"
+      curl -fsSL --proto '=https' -o /usr/local/bin/$SPOKE "$base/$SPOKE"
+      curl -fsSL --proto '=https' -o /tmp/SHA256SUMS "$base/SHA256SUMS"
+      (cd /usr/local/bin && grep " $SPOKE\$" /tmp/SHA256SUMS | sha256sum -c -)
+      chmod +x /usr/local/bin/$SPOKE
+  script:
+    - |
+      set -eu
+      prefix="$(printf '%s' "$SPOKE" | tr '[:lower:]-' '[:upper:]_')"
+      export "${prefix}_API_URL=$SPOKE_API_URL" "${prefix}_API_TOKEN=$SPOKE_API_TOKEN" "${prefix}_API_TIMEOUT_MS=30000"
+      run_id="$($SPOKE run "$SPOKE_CAPABILITY" --input-json "$SPOKE_INPUT" | jq -r '.result.runId // .runId // empty')"
+      test -n "$run_id" || { echo "no run id returned"; exit 1; }
+      echo "Admitted run $run_id"
+      deadline=$(( $(date +%s) + SPOKE_TIMEOUT_SECONDS ))
+      while :; do
+        status="$($SPOKE run-status "$run_id" | jq -r '.status // .data.status // empty')"
+        case "$status" in completed|failed|cancelled|blocked|paused) break ;; esac
+        [ "$(date +%s)" -lt "$deadline" ] || { echo "run $run_id still $status after ${SPOKE_TIMEOUT_SECONDS}s"; exit 1; }
+        sleep "$SPOKE_POLL_SECONDS"
+      done
+      $SPOKE run-get "$run_id" > spoke-run.json
+      echo "Run $run_id finished: $status"
+      test "$status" = completed
+  artifacts:
+    when: always
+    paths: [spoke-run.json]

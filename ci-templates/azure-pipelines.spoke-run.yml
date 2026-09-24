@@ -1,0 +1,39 @@
+# Azure DevOps: run one spoke capability.
+# Add SPOKE_API_TOKEN as a secret pipeline variable.
+trigger: none
+pool:
+  vmImage: ubuntu-latest
+variables:
+  SPOKE: dgidgi
+  SPOKE_API_URL: https://api.dgidgi.io
+  SPOKE_CAPABILITY: domain.action
+  SPOKE_INPUT: '{"target":"example"}'
+  SPOKE_DOWNLOAD_BASE_URL: https://<release-channel>
+  SPOKE_CLI_VERSION: latest
+steps:
+  - bash: |
+      set -eu
+      base="${SPOKE_DOWNLOAD_BASE_URL%/}/$SPOKE_CLI_VERSION/linux-x64"
+      mkdir -p "$(Agent.TempDirectory)/spoke" && cd "$(Agent.TempDirectory)/spoke"
+      curl -fsSL --proto '=https' -o "$SPOKE" "$base/$SPOKE"
+      curl -fsSL --proto '=https' -o SHA256SUMS "$base/SHA256SUMS"
+      grep " $SPOKE\$" SHA256SUMS | sha256sum -c -
+      chmod +x "$SPOKE"
+      echo "##vso[task.prependpath]$(Agent.TempDirectory)/spoke"
+    displayName: Install spoke CLI
+  - bash: |
+      set -eu
+      prefix="$(printf '%s' "$SPOKE" | tr '[:lower:]-' '[:upper:]_')"
+      export "${prefix}_API_URL=$SPOKE_API_URL" "${prefix}_API_TOKEN=$TOKEN" "${prefix}_API_TIMEOUT_MS=30000"
+      run_id="$($SPOKE run "$SPOKE_CAPABILITY" --input-json "$SPOKE_INPUT" | jq -r '.result.runId // .runId // empty')"
+      test -n "$run_id"
+      for i in $(seq 1 180); do
+        status="$($SPOKE run-status "$run_id" | jq -r '.status // .data.status // empty')"
+        case "$status" in completed|failed|cancelled|blocked|paused) break ;; esac
+        sleep 5
+      done
+      $SPOKE run-get "$run_id" > "$(Build.ArtifactStagingDirectory)/spoke-run.json"
+      test "$status" = completed
+    displayName: Run capability
+    env:
+      TOKEN: $(SPOKE_API_TOKEN)

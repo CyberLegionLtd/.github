@@ -1,0 +1,52 @@
+// Jenkins declarative pipeline: run one spoke capability.
+// Store the tenant token as a "Secret text" credential with id SPOKE_API_TOKEN.
+pipeline {
+  agent any
+  environment {
+    SPOKE = 'dgidgi'
+    SPOKE_API_URL = 'https://api.dgidgi.io'
+    SPOKE_CAPABILITY = 'domain.action'
+    SPOKE_INPUT = '{"target":"example"}'
+    SPOKE_DOWNLOAD_BASE_URL = 'https://<release-channel>'
+    SPOKE_CLI_VERSION = 'latest'
+  }
+  stages {
+    stage('Install spoke CLI') {
+      steps {
+        sh '''
+          set -eu
+          base="${SPOKE_DOWNLOAD_BASE_URL%/}/$SPOKE_CLI_VERSION/linux-x64"
+          mkdir -p .spoke && cd .spoke
+          curl -fsSL --proto '=https' -o "$SPOKE" "$base/$SPOKE"
+          curl -fsSL --proto '=https' -o SHA256SUMS "$base/SHA256SUMS"
+          grep " $SPOKE\\$" SHA256SUMS | sha256sum -c -
+          chmod +x "$SPOKE"
+        '''
+      }
+    }
+    stage('Run capability') {
+      steps {
+        withCredentials([string(credentialsId: 'SPOKE_API_TOKEN', variable: 'SPOKE_API_TOKEN')]) {
+          sh '''
+            set -eu
+            cli="$PWD/.spoke/$SPOKE"
+            prefix="$(printf '%s' "$SPOKE" | tr '[:lower:]-' '[:upper:]_')"
+            export "${prefix}_API_URL=$SPOKE_API_URL" "${prefix}_API_TOKEN=$SPOKE_API_TOKEN" "${prefix}_API_TIMEOUT_MS=30000"
+            run_id="$("$cli" run "$SPOKE_CAPABILITY" --input-json "$SPOKE_INPUT" | jq -r '.result.runId // .runId // empty')"
+            test -n "$run_id"
+            for i in $(seq 1 180); do
+              status="$("$cli" run-status "$run_id" | jq -r '.status // .data.status // empty')"
+              case "$status" in completed|failed|cancelled|blocked|paused) break ;; esac
+              sleep 5
+            done
+            "$cli" run-get "$run_id" > spoke-run.json
+            test "$status" = completed
+          '''
+        }
+      }
+    }
+  }
+  post {
+    always { archiveArtifacts artifacts: 'spoke-run.json', allowEmptyArchive: true }
+  }
+}
