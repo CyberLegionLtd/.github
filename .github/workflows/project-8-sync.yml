@@ -1,0 +1,24 @@
+name: Project 8 sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print changes without writing
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 5 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node project-8/configure.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          # Classic PAT (or GitHub App token) with project, repo and read:org scopes.
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
