@@ -80,6 +80,13 @@ async function ensureSelect(project, name, options) {
   { f: existing.id, o: [...existing.options.map((o) => ({ id: o.id, name: o.name, color: 'GRAY', description: '' })), ...opts(missing)] });
 }
 
+async function ensureDate(project, name) {
+  if (project.fields.nodes.some((f) => f.name === name)) return;
+  console.log(`+ field ${name}`);
+  await mutate(`mutation($p:ID!,$name:String!){createProjectV2Field(input:{projectId:$p,dataType:DATE,name:$name}){clientMutationId}}`,
+    { p: project.id, name });
+}
+
 const REPOS_Q = `query($org:String!,$after:String){organization(login:$org){repositories(first:100,after:$after,isArchived:false){
   pageInfo{hasNextPage endCursor} nodes{id name}}}}`;
 const WORK_Q = `query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){
@@ -93,6 +100,11 @@ async function main() {
   console.log(`Project #${NUMBER}: ${project.title}${DRY ? ' (dry run)' : ''}`);
   await ensureSelect(project, 'Spoke', SPOKES);
   await ensureSelect(project, 'Repo Type', TYPES);
+  // Roadmap fields.
+  await ensureSelect(project, 'Size', ['XS', 'S', 'M', 'L', 'XL']);
+  await ensureDate(project, 'Start date');
+  await ensureDate(project, 'Target date');
+  if (process.argv.includes('--fields-only')) return;
   if (!DRY) project = await loadProject();
   const field = (n) => project.fields.nodes.find((f) => f.name === n);
   const opt = (f, n) => f?.options?.find((o) => o.name === n)?.id;

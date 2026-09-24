@@ -5,6 +5,7 @@
 - **Fields:** `Spoke` (a8i, chyper, cyberlegion, dgidgi, stelargate, one, clq, clp, estate), `Repo Type`
   (hub, api, console, docs, landing, status, support, marketplace, shop, registry, platform-service,
   capability, org). The built-in `Repository` field covers the repo.
+- **Roadmap fields:** `Size` (XS–XL), `Start date`, `Target date`. Priority, Estimate and Iteration already exist on the project. Use `--fields-only` to create fields without touching items.
 - **Repos:** links every non-archived org repo to the project.
 - **Items:** adds every open issue and PR and sets `Spoke` and `Repo Type`.
 
