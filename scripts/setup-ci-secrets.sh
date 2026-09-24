@@ -12,6 +12,10 @@ ORG="${ORG:-CyberLegionLtd}"
 ENVS=(dev staging production)
 FLY_REPOS=(clp-infra cyberlegion-api a8i-api chyper-api stelargate-api)
 DEPLOY_REPOS=("${FLY_REPOS[@]}" clp-gateway)
+# Retired cross-repo token names; GH_PAT replaces all of them.
+RETIRED=(RELEASE_PUSH_TOKEN PACKAGE_REGISTRY_TOKEN SOURCE_READ_TOKEN CLP_HOSTS_READ_TOKEN GH_PACKAGES_READ_TOKEN NODE_AUTH_TOKEN)
+ALL_REPOS=(a8i-api chyper-api cyberlegion-api stelargate-api clp-client-host-extension clp-client-host-mobile
+  clp-compute hub base-registry clp-infra clp-gates clp-kernel)
 
 ask() { local v; read -r -s -p "$1: " v; echo >&2; printf '%s' "$v"; }
 confirm() { local a; read -r -p "$1 [yes/N] " a; [ "$a" = "yes" ]; }
@@ -79,18 +83,15 @@ cleanup() {
   retire_suffixed clp-infra staging SUPABASE_SERVICE_ROLE_KEY SUPABASE_SERVICE_ROLE_KEY_STAGING
   retire_suffixed clp-infra production SUPABASE_SERVICE_ROLE_KEY SUPABASE_SERVICE_ROLE_KEY_PROD
 
-  echo "== Legacy read tokens (replaced by GH_PAT)"
+  echo "== Retired tokens (all replaced by GH_PAT)"
   if ! has_org_secret GH_PAT; then
-    echo "KEEP read tokens: org GH_PAT is not set" >&2
+    echo "KEEP retired tokens: org GH_PAT is not set" >&2
   else
-    for name in SOURCE_READ_TOKEN CLP_HOSTS_READ_TOKEN GH_PACKAGES_READ_TOKEN NODE_AUTH_TOKEN; do
-      delete_org_secret "$name"
-    done
-    for repo in hub clp-compute base-registry clp-gates; do delete_repo_secret "$repo" SOURCE_READ_TOKEN; done
-    for repo in clp-client-host-extension clp-client-host-mobile; do delete_repo_secret "$repo" CLP_HOSTS_READ_TOKEN; done
-    delete_repo_secret clp-infra GH_PACKAGES_READ_TOKEN
-    for repo in cyberlegion-api a8i-api chyper-api stelargate-api; do delete_repo_secret "$repo" NODE_AUTH_TOKEN; done
     echo "NOTE: clp-registry and spokes-registry still read SOURCE_READ_TOKEN / PACKAGE_REGISTRY_TOKEN until migrated." >&2
+    for name in "${RETIRED[@]}"; do
+      delete_org_secret "$name"
+      for repo in "${ALL_REPOS[@]}"; do delete_repo_secret "$repo" "$name"; done
+    done
   fi
 
   echo "== Legacy clp-gates App names"
@@ -107,16 +108,16 @@ cleanup() {
   delete_var clp-infra PLATFORM_DEPLOYMENT_HEALTH_POLL_SECONDS
   delete_repo_secret clp-infra IDENTITY_JWKS_URL
 
-  echo "PACKAGE_REGISTRY_TOKEN is NOT deleted here: first grant each package Write for its publishing repo (see docs)."
 }
 
 if [ "${1:-}" = "--cleanup" ]; then cleanup; exit 0; fi
 
 echo "== Org-level"
 org_secret GH_PAT
+echo "GH_PAT: fine-grained token from a dedicated bot account, with an expiry. Contents RW, Pull requests RW, Packages RW, Metadata R (+ Workflows RW only if pushes touch .github/workflows)."
+echo "Optional: GATES_APP_ID / GATES_APP_PRIVATE_KEY (clp-gates prefers the App when set)."
 org_secret GATES_APP_ID
 org_secret GATES_APP_PRIVATE_KEY
-org_secret RELEASE_PUSH_TOKEN
 org_var PACKAGE_REGISTRY_URL "https://npm.pkg.github.com"
 
 echo "== Environments"

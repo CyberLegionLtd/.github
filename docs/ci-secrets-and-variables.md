@@ -10,11 +10,12 @@ Workflow changes are on branch `claude/ci-secrets-consolidation` in each repo. D
 
 | Secret | Purpose | Access |
 |---|---|---|
-| `GH_PAT` | Cross-repo **read**: checking out sibling repos and reading private `@cyberlegionltd/*` packages. | Contents: read and Packages: read on all repos. A GitHub App token is better. |
-| `GATES_APP_ID` / `GATES_APP_PRIVATE_KEY` | The clp-gates GitHub App. Used to mint read tokens for clp-gates and clp-registry, and metadata for the inventory. | App: Contents: read and Metadata: read. |
-| `RELEASE_PUSH_TOKEN` | The only **write** secret. It pushes release and version commits, opens promotion PRs, and pushes cross-repo migrations. | Contents: write and Pull requests: write, only on the repos that need them (see the open decisions). |
+| `GH_PAT` | **The one cross-repo token, for reads and writes.** Checks out sibling repos, reads private `@cyberlegionltd/*` packages, publishes packages, pushes release and version commits, opens promotion PRs, and pushes cross-repo migrations. | Fine-grained token on the org's repos with: Contents **read and write**, Pull requests **read and write**, Packages **read and write**, Metadata **read**. Add Workflows **read and write** only if a push changes files under `.github/workflows`. |
+| `GATES_APP_ID` / `GATES_APP_PRIVATE_KEY` | Optional. The clp-gates GitHub App. When it is set, clp-gates uses it (not `GH_PAT`) to mint read tokens for clp-gates and clp-registry, and metadata for the inventory. | App: Contents: read and Metadata: read. |
 
-Publishing to GitHub Packages uses the built-in `github.token` with job `permissions: packages: write`, so it needs no secret.
+Create `GH_PAT` under a dedicated machine (bot) account, not a person's account, and give it an expiry date. Put a reminder in the calendar to rotate it before it expires.
+
+Publishing to GitHub Packages uses `secrets.GH_PAT || secrets.PACKAGE_REGISTRY_TOKEN || github.token`, and the job keeps `permissions: packages: write` so that the `github.token` fallback still works.
 
 ### Org-level variables
 
@@ -48,14 +49,14 @@ Delete each old secret only after its canonical replacement is set. The fallback
 
 | Old name | New name | Where it was read | Remove after |
 |---|---|---|---|
-| `SOURCE_READ_TOKEN` | `GH_PAT` | clp-gates (secret input), hub, clp-compute, base-registry, clp-registry\*, spokes-registry\* | the org `GH_PAT` is set as read-only and clp-registry and spokes-registry are migrated |
+| `SOURCE_READ_TOKEN` | `GH_PAT` | clp-gates (secret input), hub, clp-compute, base-registry, clp-registry\*, spokes-registry\* | the org `GH_PAT` is set and clp-registry and spokes-registry are migrated |
 | `CLP_HOSTS_READ_TOKEN` | `GH_PAT` | clp-client-host-extension, clp-client-host-mobile | `GH_PAT` is set |
 | `GH_PACKAGES_READ_TOKEN` | `GH_PAT` | clp-infra `reusable-deploy-app.yml` (secret input) | every caller passes `GH_PAT` |
 | `NODE_AUTH_TOKEN` (a secret, for reading) | `GH_PAT` | cyberlegion-api, a8i-api, chyper-api, stelargate-api (Docker `node_auth_token` build secret) | `GH_PAT` is set |
 | `PACKAGE_REGISTRY_TOKEN` (for reading) | `GH_PAT` | clp-gates (secret input) | `GH_PAT` is set |
-| `PACKAGE_REGISTRY_TOKEN` (for publishing) | `github.token` + `packages: write` | base-registry publish workflows, clp-registry\*, spokes-registry\* | each package grants the publishing repo **Write** under Package settings → Manage Actions access (see below) |
+| `PACKAGE_REGISTRY_TOKEN` (for publishing) | `GH_PAT` | base-registry publish workflows, clp-registry\*, spokes-registry\* | `GH_PAT` is set with Packages: read and write, and clp-registry and spokes-registry are migrated |
 | `CLP_GATES_APP_ID` / `CLP_GATES_APP_PRIVATE_KEY` | `GATES_APP_ID` / `GATES_APP_PRIVATE_KEY` | clp-gates (secret inputs of every reusable workflow) | the org `GATES_APP_*` are set and no external caller passes the old input names |
-| `GH_PAT` (when used for writing) | `RELEASE_PUSH_TOKEN` | hub `SOURCE_WRITE_TOKEN` (migration pushes), base-registry promotion PRs | `RELEASE_PUSH_TOKEN` can reach those repos, **and** `GH_PAT` has been reduced to read-only |
+| `RELEASE_PUSH_TOKEN` | `GH_PAT` | hub `SOURCE_WRITE_TOKEN` (migration pushes), base-registry promotion PRs | `GH_PAT` is set with Contents and Pull requests: read and write |
 | `FLY_API_TOKEN_PROD` | `FLY_API_TOKEN` in the `production` environment | clp-infra | `production`/`FLY_API_TOKEN` is set in clp-infra |
 | `SUPABASE_URL_STAGING` / `_PROD` | `SUPABASE_URL` in the `staging` / `production` environment | clp-infra | the environment values are set |
 | `SUPABASE_SERVICE_ROLE_KEY_STAGING` / `_PROD` | `SUPABASE_SERVICE_ROLE_KEY` in the `staging` / `production` environment | clp-infra | the environment values are set |
@@ -67,16 +68,16 @@ Delete each old secret only after its canonical replacement is set. The fallback
 
 ### Fallback order and the production safety rule
 
-- **Read and app secrets:** `secrets.CANONICAL || secrets.OLD`.
+- **Cross-repo tokens (read and write) and app secrets:** `secrets.GH_PAT || secrets.OLD` (for publishing, `|| github.token` last).
 - **Environment-suffixed secrets in staging and production:** the order is reversed: `secrets.X_PROD || secrets.X`. Until the Environments exist, a repo-level `FLY_API_TOKEN` holds the **dev** value. If it came first, it would shadow `FLY_API_TOKEN_PROD` in a production job. With the legacy suffixed secret first, a dev credential can never reach a production deploy. `tests/workflow-secret-selection.test.mjs` in clp-infra enforces this.
 - **The flip needs no code change.** Once `production`/`FLY_API_TOKEN` is set, delete `FLY_API_TOKEN_PROD` and the expression falls through to the environment-scoped value.
 - **Order matters.** Never delete a suffixed secret before its environment-scoped value exists. Otherwise the job would fall back to the repo-level (dev) value.
 
-### Publishing with `github.token`
+### Publishing
 
-`github.token` can publish a GitHub Packages npm package only when the package is linked to the publishing repo, or when the package grants that repo **Write** under *Manage Actions access*. Some `@cyberlegionltd/*` packages were first published from other repos (hub and the older monorepos). For those packages `PACKAGE_REGISTRY_TOKEN` is still needed, so it stays as the first choice: `secrets.PACKAGE_REGISTRY_TOKEN || github.token`. Once every package grants the publishing registry repo Write access, delete the `PACKAGE_REGISTRY_TOKEN` secret and publishing falls through to `github.token` with no workflow change.
+Publishing reads `secrets.GH_PAT || secrets.PACKAGE_REGISTRY_TOKEN || github.token` in `base-registry` `publish-packages.yml` and `publish-dev-snapshot.yml`. `GH_PAT` needs Packages: read and write. `github.token` is only the last fallback. It can publish a package only when the package is linked to the publishing repo, or grants that repo **Write** under *Manage Actions access*.
 
-`base-registry/publish-dev-snapshot.yml` still reads `PACKAGE_REGISTRY_TOKEN || GH_PAT || github.token`. The owner has to decide on this (see the open decisions) because another agent is changing that file right now.
+`publish-dev-snapshot.yml` is also being changed on the `claude/registry-readiness` branch, so the two branches may conflict on that line when they merge. Keep the `GH_PAT`-first order.
 
 ## Reusable-workflow secret interfaces
 
@@ -115,8 +116,7 @@ Run `scripts/setup-ci-secrets.sh` with an authenticated `gh` CLI (org admin). It
 
 ## Open decisions for the owner
 
-1. **`GH_PAT` is used for writing today.** hub's migration workflows and base-registry's promotion PRs use it with write access. They now prefer `RELEASE_PUSH_TOKEN`, so `RELEASE_PUSH_TOKEN` must be an org secret that reaches hub, base-registry, clp-kernel and clp-registry before `GH_PAT` can become read-only. Promotion PRs need a PAT or App token, not `github.token`, so that CI runs on the PR.
+1. **Decided: one token.** `GH_PAT` is the single org secret for cross-repo reads and writes. `RELEASE_PUSH_TOKEN`, `PACKAGE_REGISTRY_TOKEN`, `SOURCE_READ_TOKEN`, `CLP_HOSTS_READ_TOKEN`, `GH_PACKAGES_READ_TOKEN` and the `NODE_AUTH_TOKEN` secret are retired and remain only as fallbacks. Promotion PRs need a PAT or App token, not `github.token`, so that CI runs on the PR.
 2. **clp-infra environment names.** `audit-platform-environments.yml` uses the environment `prod`, and `opensandbox-supply-chain.yml` defaults to `development`. The canonical names are `production` and `dev`. Renaming would hide any secrets already stored in `prod`/`development`, so the names were left as they are. Copy those values into `production`/`dev` first, then rename.
 3. **`APP_ROUTER_DNS_TARGET_*`.** `scripts/ensure-app-host-dns.mjs` writes DNS records for all three environments in a single run, so it needs all three values at once. A single job can bind only one environment. To consolidate, change the script to handle one environment per run (the job would bind `environment: <target_environment>`). Until then the suffixed variables stay.
-4. **`PACKAGE_REGISTRY_TOKEN` for publishing.** Grant each `@cyberlegionltd/*` package Write access for its publishing repo, then delete the secret. Also decide whether `publish-dev-snapshot.yml` should drop `GH_PAT` from its publish chain. It has to once `GH_PAT` is read-only.
-5. **Skipped repos.** clp-registry and spokes-registry had uncommitted changes and were not migrated. They still read `SOURCE_READ_TOKEN` and `PACKAGE_REGISTRY_TOKEN`.
+4. **Skipped repos.** clp-registry and spokes-registry had uncommitted changes and were not migrated. They still read `SOURCE_READ_TOKEN` and `PACKAGE_REGISTRY_TOKEN`.
