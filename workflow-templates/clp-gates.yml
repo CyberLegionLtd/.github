@@ -1,0 +1,30 @@
+# CLP Gates — PR / source entry point caller (from CyberLegionLtd/clp-gates workflow-templates/gates.yml).
+# Pin clp-gates to a REVIEWED SHA and set `gates-ref` to the SAME value.
+# The job is named `clp-gates` so the required status is `clp-gates / result`.
+# Other entry points: deployment-verification.yml, release-verification.yml,
+# scheduled.yml (see docs/USAGE.md).
+name: gates
+on:
+  pull_request: {}
+  push:
+    branches: [dev, staging, main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  clp-gates:
+    # Keep uses and gates-ref pinned to the same reviewed commit.
+    uses: CyberLegionLtd/clp-gates/.github/workflows/gates.yml@8cbc2706a4323637730bc9c7480d3a8306b51321
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      tier: pr
+      gates-ref: 8cbc2706a4323637730bc9c7480d3a8306b51321
+    secrets:
+      # Explicit read credential for the private clp-gates / clp-registry
+      # sources (GitHub App preferred; SOURCE_READ_TOKEN as the alternative).
+      CLP_GATES_APP_ID: ${{ secrets.CLP_GATES_APP_ID }}
+      CLP_GATES_APP_PRIVATE_KEY: ${{ secrets.CLP_GATES_APP_PRIVATE_KEY }}
+      SOURCE_READ_TOKEN: ${{ secrets.SOURCE_READ_TOKEN }}
+      PACKAGE_REGISTRY_TOKEN: ${{ secrets.PACKAGE_REGISTRY_TOKEN }}
