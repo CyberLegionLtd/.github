@@ -1,0 +1,72 @@
+name: Clean up merged branches
+
+# Deletes branches across the CyberLegionLtd repos whose work is already in dev.
+# A branch is deleted only when ALL of these hold:
+#   - it is not dev, staging, main, or protected
+#   - it has no open pull request
+#   - its tip is fully contained in dev (ahead_by == 0), OR its tip is exactly
+#     the head commit of a merged pull request (nothing was added after merge)
+# Anything else is listed as "kept" with the reason. Default is a dry run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted without deleting"
+        type: boolean
+        default: true
+      repos:
+        description: "Space-separated repo names (blank = all listed below)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete fully merged branches
+        env:
+          GH_TOKEN: ${{ secrets.BRANCH_CLEANUP_TOKEN }}
+          OWNER: CyberLegionLtd
+          DRY_RUN: ${{ inputs.dry_run }}
+          REPOS: ${{ inputs.repos }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::Secret BRANCH_CLEANUP_TOKEN is not set (needs Contents: read/write and Pull requests: read on the target repos)."
+            exit 1
+          fi
+          DEFAULT_REPOS="hub base-registry clp-registry clp-compute clp-intelligence clp-api clp-factory-api clp-factory-ui clp-admin-ui clp-admin-api clp-support-ui clp-reality clp-cognition clp-kernel clp-edge clp-infra clp-communication"
+          REPOS="${REPOS:-$DEFAULT_REPOS}"
+          deleted=0; kept=0
+          for repo in $REPOS; do
+            echo "::group::$repo"
+            gh api --paginate "repos/$OWNER/$repo/branches?per_page=100" \
+              --jq '.[] | [.name, .commit.sha, (.protected|tostring)] | @tsv' |
+            while IFS=$'\t' read -r br sha protected; do
+              case "$br" in dev|staging|main) continue;; esac
+              if [ "$protected" = "true" ]; then echo "KEEP  $br (protected)"; continue; fi
+              enc=$(jq -rn --arg b "$br" '$b|@uri')
+              open=$(gh api "repos/$OWNER/$repo/pulls?state=open&head=$OWNER:$enc" --jq 'length')
+              if [ "$open" != "0" ]; then echo "KEEP  $br (open PR)"; continue; fi
+              ahead=$(gh api "repos/$OWNER/$repo/compare/dev...$sha" --jq '.ahead_by' 2>/dev/null || echo "?")
+              reason=""
+              if [ "$ahead" = "0" ]; then
+                reason="contained in dev"
+              else
+                merged=$(gh api "repos/$OWNER/$repo/pulls?state=closed&head=$OWNER:$enc&per_page=100" \
+                  --jq "[.[] | select(.merged_at != null and .head.sha == \"$sha\")] | length")
+                [ "$merged" != "0" ] && reason="tip == merged PR head"
+              fi
+              if [ -z "$reason" ]; then echo "KEEP  $br (unmerged work, ahead_by=$ahead)"; continue; fi
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "WOULD DELETE $br ($reason)"
+              else
+                gh api -X DELETE "repos/$OWNER/$repo/git/refs/heads/$enc" && echo "DELETED $br ($reason)"
+              fi
+            done
+            echo "::endgroup::"
+          done
