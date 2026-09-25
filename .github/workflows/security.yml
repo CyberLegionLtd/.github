@@ -22,6 +22,6 @@ jobs:
     permissions:
       contents: read
     # Pinned to clp-gates PR #9 head; re-pin to the dev merge commit after it lands.
-    uses: CyberLegionLtd/clp-gates/.github/workflows/security-gates.yml@ae887d2511837b644416386ec6f96f6174c8abf7 # claude/security-gates
+    uses: CyberLegionLtd/clp-gates/.github/workflows/security-gates.yml@1630bc45807c9b9380744ba648b837dfa817ce93 # claude/security-gates
     with:
       mode: ${{ (github.event_name != 'pull_request' || github.event.pull_request.base.ref == 'staging' || github.event.pull_request.base.ref == 'main') && 'full' || 'fast' }}
